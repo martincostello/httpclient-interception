@@ -8,14 +8,17 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using JustEat.HttpClientInterception.Matching;
 
 namespace JustEat.HttpClientInterception
 {
     internal sealed class HttpInterceptionResponse
     {
+        internal ICollection<HttpRequestPredicate>? AdditionalMatchers { get; set; }
+
         internal Func<HttpContent, Task<bool>>? ContentMatcher { get; set; }
 
-        internal Func<HttpRequestMessage, Task<bool>>? UserMatcher { get; set; }
+        internal HttpRequestPredicate? UserMatcher { get; set; }
 
         internal Matching.RequestMatcher? InternalMatcher { get; set; }
 

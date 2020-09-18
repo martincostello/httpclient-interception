@@ -20,6 +20,8 @@ namespace JustEat.HttpClientInterception
 
         private static readonly Func<Task<byte[]>> EmptyContentFactory = () => EmptyContent;
 
+        private ICollection<HttpRequestPredicate>? _additionalMatchers;
+
         private Func<Task<byte[]>>? _contentFactory;
 
         private Func<HttpContent, Task<bool>>? _contentMatcher;
@@ -38,7 +40,7 @@ namespace JustEat.HttpClientInterception
 
         private Func<HttpRequestMessage, CancellationToken, Task<bool>>? _onIntercepted;
 
-        private Func<HttpRequestMessage, Task<bool>>? _requestMatcher;
+        private HttpRequestPredicate? _requestMatcher;
 
         private string? _reasonPhrase;
 
@@ -80,7 +82,7 @@ namespace JustEat.HttpClientInterception
         /// </remarks>
         public HttpRequestInterceptionBuilder For(Predicate<HttpRequestMessage> predicate)
         {
-            _requestMatcher = predicate == null ? null : new Func<HttpRequestMessage, Task<bool>>((message) => Task.FromResult(predicate(message)));
+            _requestMatcher = predicate == null ? null : new HttpRequestPredicate((message) => Task.FromResult(predicate(message)));
             return this;
         }
 
@@ -99,7 +101,7 @@ namespace JustEat.HttpClientInterception
         /// </remarks>
         public HttpRequestInterceptionBuilder For(Func<HttpRequestMessage, Task<bool>> predicate)
         {
-            _requestMatcher = predicate;
+            _requestMatcher = new HttpRequestPredicate(predicate);
             return this;
         }
 
@@ -900,10 +902,65 @@ namespace JustEat.HttpClientInterception
             return this;
         }
 
+        /// <summary>
+        /// Configures the builder to additionally match any request that meets the criteria defined
+        /// by the specified asynchronous predicate if the request matches the default critiera.
+        /// </summary>
+        /// <param name="predicate">
+        /// A delegate to a method which returns <see langword="true"/> if the
+        /// request is considered a match; otherwise <see langword="false"/>.
+        /// </param>
+        /// <returns>
+        /// The current <see cref="HttpRequestInterceptionBuilder"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="predicate"/> is <see langword="null"/>.
+        /// </exception>
+        public HttpRequestInterceptionBuilder AndFor(Predicate<HttpRequestMessage> predicate)
+        {
+            if (predicate is null)
+            {
+                throw new ArgumentNullException(nameof(predicate));
+            }
+
+            // TODO Need a way to clear/reset the additional matchers
+            _additionalMatchers ??= new List<HttpRequestPredicate>();
+            _additionalMatchers.Add(new HttpRequestPredicate((message) => Task.FromResult(predicate(message))));
+            return this;
+        }
+
+        /// <summary>
+        /// Configures the builder to additionally match any request that meets the criteria defined
+        /// by the specified asynchronous predicate if the request matches the default critiera.
+        /// </summary>
+        /// <param name="predicate">
+        /// A delegate to an asynchronous method which returns <see langword="true"/> if
+        /// the request is considered a match; otherwise <see langword="false"/>.
+        /// </param>
+        /// <returns>
+        /// The current <see cref="HttpRequestInterceptionBuilder"/>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">
+        /// <paramref name="predicate"/> is <see langword="null"/>.
+        /// </exception>
+        public HttpRequestInterceptionBuilder AndFor(Func<HttpRequestMessage, Task<bool>> predicate)
+        {
+            if (predicate is null)
+            {
+                throw new ArgumentNullException(nameof(predicate));
+            }
+
+            // TODO Need a way to clear/reset the additional matchers
+            _additionalMatchers ??= new List<HttpRequestPredicate>();
+            _additionalMatchers.Add(new HttpRequestPredicate(predicate));
+            return this;
+        }
+
         internal HttpInterceptionResponse Build()
         {
             var response = new HttpInterceptionResponse()
             {
+                AdditionalMatchers = _additionalMatchers,
                 ContentFactory = _contentFactory ?? EmptyContentFactory,
                 ContentMatcher = _contentMatcher,
                 ContentStream = _contentStream,

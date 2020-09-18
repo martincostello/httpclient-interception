@@ -398,7 +398,9 @@ namespace JustEat.HttpClientInterception
         /// </returns>
         private static string BuildKey(HttpInterceptionResponse interceptor)
         {
-            if (interceptor.UserMatcher != null || interceptor.ContentMatcher != null)
+            if (interceptor.UserMatcher != null ||
+                interceptor.ContentMatcher != null ||
+                interceptor.AdditionalMatchers?.Count > 0)
             {
                 // Use the internal matcher's hash code as UserMatcher (a delegate)
                 // will always return the hash code. See https://stackoverflow.com/q/6624151/1064169
@@ -520,6 +522,31 @@ namespace JustEat.HttpClientInterception
             else
             {
                 matcher = new RegistrationMatcher(registration, _comparer);
+            }
+
+            if (registration.AdditionalMatchers?.Count > 0)
+            {
+                var predicates = new List<HttpRequestPredicate>(registration.AdditionalMatchers.Count + 1)
+                {
+                    matcher.IsMatchAsync,
+                };
+
+                predicates.AddRange(registration.AdditionalMatchers);
+
+                async Task<bool> MatchAll(HttpRequestMessage request)
+                {
+                    foreach (var predicate in predicates)
+                    {
+                        if (!await predicate(request).ConfigureAwait(false))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                matcher = new DelegatingMatcher(MatchAll);
             }
 
             registration.InternalMatcher = matcher;
